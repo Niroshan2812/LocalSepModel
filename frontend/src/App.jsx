@@ -33,14 +33,25 @@ function App() {
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    // Trigger Pro upgrade if user asks deeply complex questions (simulation)
-    if (input.toLowerCase().includes("deep analysis") || input.toLowerCase().includes("contract")) {
-      if (currentModel === 'Lite') {
-        setShowUpgrade(true);
-        setMessages(prev => [...prev, { role: 'user', content: input }]);
-        setMessages(prev => [...prev, { role: 'assistant', content: 'This request requires the Pro model. Please upgrade to continue.' }]);
-        setInput('');
-        return;
+    // Smart Trigger: Check complexity with Lite model
+    if (currentModel === 'Lite') {
+      try {
+        const checkRes = await fetch('/api/chat/complexity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: input })
+        });
+        const checkData = await checkRes.json();
+
+        if (checkData.isComplex) {
+          setShowUpgrade(true);
+          setMessages(prev => [...prev, { role: 'user', content: input }]);
+          setMessages(prev => [...prev, { role: 'assistant', content: 'I notice this is a complex request. My standard model might struggle. I recommend upgrading to Pro Intelligence for deep reasoning.' }]);
+          setInput('');
+          return;
+        }
+      } catch (e) {
+        console.warn("Complexity check failed, proceeding normally", e);
       }
     }
 
@@ -75,7 +86,6 @@ function App() {
 
   const handleUpgradeComplete = () => {
     setCurrentModel("Pro");
-    // Actually switch model on backend
     fetch('/api/model/switch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -85,14 +95,18 @@ function App() {
 
   return (
     <div className="container" style={{ maxWidth: '800px', margin: '0 auto', padding: '20px', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ marginBottom: '20px', textAlign: 'center', position: 'relative' }}>
-        <div style={{ position: 'absolute', right: 0, top: 0, fontSize: '0.8rem', opacity: 0.8, background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
-          Current Model: <strong>{currentModel}</strong>
-        </div>
-        <h1 style={{ background: 'var(--primary-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '2.5rem' }}>
+      <header style={{ marginBottom: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+        <h1 style={{ background: 'var(--primary-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '2.5rem', margin: 0 }}>
           Local AI Assistant
         </h1>
-        <p style={{ opacity: 0.7 }}>Privacy-First. Local-First.</p>
+        <div style={{
+          background: currentModel === 'Pro' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.1)',
+          padding: '5px 15px', borderRadius: '20px', fontSize: '0.9rem', border: '1px solid rgba(255,255,255,0.2)',
+          display: 'flex', alignItems: 'center', gap: '8px'
+        }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: currentModel === 'Pro' ? '#fff' : '#fbbf24' }}></span>
+          Current Model: <strong>{currentModel}</strong>
+        </div>
       </header>
 
       {showUpgrade && (
@@ -131,7 +145,10 @@ function App() {
         </div>
       </div>
 
-      <div className="input-area glass-panel" style={{ padding: '10px', display: 'flex', gap: '10px' }}>
+      <div className="input-area glass-panel" style={{ padding: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <button className="btn-icon" title="Upload Document (Coming in Phase 3)" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: '40px', height: '40px', borderRadius: '8px', cursor: 'pointer', opacity: 0.5 }}>
+          📎
+        </button>
         <input
           type="text"
           className="input-field"
