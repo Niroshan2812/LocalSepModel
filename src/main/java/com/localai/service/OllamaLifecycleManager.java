@@ -19,6 +19,7 @@ public class OllamaLifecycleManager {
     private static final int OLLAMA_PORT = 11434;
     private Process ollamaProcess;
     private static final String LITE_MODEL = "qwen2.5:0.5b";
+    private static final String EMBEDDING_MODEL = "nomic-embed-text";
     private final RestClient restClient = RestClient.create("http://localhost:" + OLLAMA_PORT);
 
     @PostConstruct
@@ -30,35 +31,32 @@ public class OllamaLifecycleManager {
             try {
                 startOllamaProcess();
             } catch (IOException e) {
-                logger.error("Failed to start Ollama process. Please ensure Ollama is installed or bundled.", e);
-                // Continue to try model check even if start failed? Probably not, but let's be
-                // safe.
+                logger.error("Failed to start Ollama process.", e);
                 return;
             }
         }
 
-        // Check model after ensuring Ollama is (hopefully) up
-        ensureLiteModelReady();
+        // Check models
+        ensureModelReady(LITE_MODEL);
+        ensureModelReady(EMBEDDING_MODEL);
     }
 
-    private void ensureLiteModelReady() {
-        logger.info("Checking for lite model: {}", LITE_MODEL);
+    private void ensureModelReady(String modelName) {
+        logger.info("Checking for model: {}", modelName);
         try {
             String response = restClient.get()
                     .uri("/api/tags")
                     .retrieve()
                     .body(String.class);
-            if (response != null && response.contains(LITE_MODEL)) {
-                logger.info("Lite model is ready: {}", LITE_MODEL);
+            if (response != null && response.contains(modelName)) {
+                logger.info("Model is ready: {}", modelName);
 
             } else {
-                logger.warn("Model is missing. Starting auto-download for: {}", LITE_MODEL);
-                pullModel(LITE_MODEL);
+                logger.warn("Model '{}' is missing. Starting auto-download.", modelName);
+                pullModel(modelName);
             }
         } catch (Exception e) {
-            logger.error(
-                    "Failed to communicate with Ollama API to check models. Ollama might verify still be initializing.",
-                    e);
+            logger.error("Failed to communicate with Ollama API to check models.", e);
         }
     }
 

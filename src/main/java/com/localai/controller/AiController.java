@@ -68,12 +68,14 @@ public class AiController {
     }
 
     @PostMapping("/docs/upload")
-    public Map<String, String> uploadDocument(@RequestParam("file") MultipartFile file) {
+    public Map<String, Object> uploadDocument(@RequestParam("file") MultipartFile file) {
         try {
-            documentService.processAndVectorize(file);
-            return Map.of("status", "success", "message",
-                    "Document indexed successfully: " + file.getOriginalFilename());
-        } catch (Exception e) {
+            Map<String, Object> metadata = documentService.processAndVectorize(file);
+            return Map.of(
+                    "status", "success",
+                    "message", "Document indexed successfully",
+                    "metadata", metadata);
+        } catch (Throwable e) {
             return Map.of("status", "error", "message", "Failed to index document: " + e.getMessage());
         }
     }
