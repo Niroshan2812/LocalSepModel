@@ -30,6 +30,36 @@ function App() {
       .catch(e => console.error(e));
   }, []);
 
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setMessages(prev => [...prev, { role: 'assistant', content: `Indexing ${file.name}...` }]);
+
+    try {
+      const res = await fetch('/api/docs/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setUploadedFile(file.name);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Document "${file.name}" indexed! I can now answer questions about it.` }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Failed to index document: ${data.message}` }]);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Error uploading document.' }]);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -99,13 +129,24 @@ function App() {
         <h1 style={{ background: 'var(--primary-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: '2.5rem', margin: 0 }}>
           Local AI Assistant
         </h1>
-        <div style={{
-          background: currentModel === 'Pro' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.1)',
-          padding: '5px 15px', borderRadius: '20px', fontSize: '0.9rem', border: '1px solid rgba(255,255,255,0.2)',
-          display: 'flex', alignItems: 'center', gap: '8px'
-        }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: currentModel === 'Pro' ? '#fff' : '#fbbf24' }}></span>
-          Current Model: <strong>{currentModel}</strong>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{
+            background: currentModel === 'Pro' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255,255,255,0.1)',
+            padding: '5px 15px', borderRadius: '20px', fontSize: '0.9rem', border: '1px solid rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', gap: '8px'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: currentModel === 'Pro' ? '#fff' : '#fbbf24' }}></span>
+            Current Model: <strong>{currentModel}</strong>
+          </div>
+          {uploadedFile && (
+            <div style={{
+              background: 'rgba(59, 130, 246, 0.2)',
+              padding: '5px 15px', borderRadius: '20px', fontSize: '0.9rem', border: '1px solid rgba(59, 130, 246, 0.4)',
+              color: '#93c5fd'
+            }}>
+              📄 {uploadedFile}
+            </div>
+          )}
         </div>
       </header>
 
@@ -146,7 +187,12 @@ function App() {
       </div>
 
       <div className="input-area glass-panel" style={{ padding: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button className="btn-icon" title="Upload Document (Coming in Phase 3)" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: '40px', height: '40px', borderRadius: '8px', cursor: 'pointer', opacity: 0.5 }}>
+        <input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: 'none' }} accept=".pdf" />
+        <button
+          className="btn-icon"
+          title="Upload Document"
+          onClick={() => fileInputRef.current.click()}
+          style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', width: '40px', height: '40px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           📎
         </button>
         <input

@@ -1,11 +1,19 @@
 package com.localai.controller;
 
 import com.localai.service.ModelManagerService;
+import com.localai.service.DocumentService;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.ollama.api.OllamaOptions;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,24 +22,60 @@ public class AiController {
 
     private final ChatClient chatClient;
     private final ModelManagerService modelManager;
+    private final DocumentService documentService;
+    private final VectorStore vectorStore;
 
-    public AiController(ChatClient chatClient, ModelManagerService modelManager) {
+    public AiController(ChatClient chatClient, ModelManagerService modelManager, DocumentService documentService,
+            VectorStore vectorStore) {
         this.chatClient = chatClient;
         this.modelManager = modelManager;
+        this.documentService = documentService;
+        this.vectorStore = vectorStore;
     }
 
     @PostMapping("/chat")
     public Map<String, String> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
-
-        // Dynamically select model
         String modelName = modelManager.getCurrentModel();
 
-        // Passing options to override default model
-        Prompt prompt = new Prompt(userMessage, OllamaOptions.create().withModel(modelName));
+        // RAG: Retrieval Augmented Generation
+        // 1. Search for relevant context
+        List<Document> similarDocuments = vectorStore.similaritySearch(
+                SearchRequest.query(userMessage).withTopK(2));
+
+        StringBuilder context = new StringBuilder();
+        if (!similarDocuments.isEmpty()) {
+            context.append("\nCONTEXT FROM UPLOADED DOCUMENTS:\n");
+            for (Document doc : similarDocuments) {
+                context.append(doc.getContent()).append("\n---\n");
+            }
+        }
+
+        // 2. Construct Prompt with Context
+        String systemMsg = "You are a helpful AI assistant. ";
+        if (context.length() > 0) {
+            systemMsg += "Use the provided context to answer the user's question. If the answer is not in the context, say so, but try to be helpful based on general knowledge.\n"
+                    + context.toString();
+        }
+
+        SystemMessage systemMessage = new SystemMessage(systemMsg);
+        UserMessage userMsg = new UserMessage(userMessage);
+
+        Prompt prompt = new Prompt(List.of(systemMessage, userMsg), OllamaOptions.create().withModel(modelName));
 
         String response = chatClient.call(prompt).getResult().getOutput().getContent();
         return Map.of("response", response, "model", modelName);
+    }
+
+    @PostMapping("/docs/upload")
+    public Map<String, String> uploadDocument(@RequestParam("file") MultipartFile file) {
+        try {
+            documentService.processAndVectorize(file);
+            return Map.of("status", "success", "message",
+                    "Document indexed successfully: " + file.getOriginalFilename());
+        } catch (Exception e) {
+            return Map.of("status", "error", "message", "Failed to index document: " + e.getMessage());
+        }
     }
 
     @PostMapping("/chat/classify")
