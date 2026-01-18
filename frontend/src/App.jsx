@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './index.css';
+import Settings from './Settings';
 import LegalWorkflow from './LegalWorkflow';
 import FinanceWorkflow from './FinanceWorkflow';
 import HealthWorkflow from './HealthWorkflow';
@@ -53,6 +54,7 @@ function AppContent() {
       case 'legal': return <LegalWorkflow />;
       case 'finance': return <FinanceWorkflow />;
       case 'health': return <HealthWorkflow />;
+      case 'settings': return <Settings />;
       default: return <LegalWorkflow />;
     }
   };
@@ -89,6 +91,12 @@ function AppContent() {
           </div>
           <div style={navItemStyle('health')} onClick={() => setActiveTab('health')}>
             <span>❤️</span> Health
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={navItemStyle('settings')} onClick={() => setActiveTab('settings')}>
+            <span>⚙️</span> Settings
           </div>
         </div>
 
