@@ -30,7 +30,10 @@ const AgentMatrix = ({
                                 className="input-field"
                                 style={{ margin: 0 }}
                             >
-                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                {availableModels.map(m => {
+                                    const name = typeof m === 'string' ? m : m.name;
+                                    return <option key={name} value={name}>{name} {m.details ? `(${m.details})` : ''}</option>;
+                                })}
                             </select>
                             <div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '5px' }}>
@@ -53,7 +56,10 @@ const AgentMatrix = ({
                                 className="input-field"
                                 style={{ margin: 0 }}
                             >
-                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                {availableModels.map(m => {
+                                    const name = typeof m === 'string' ? m : m.name;
+                                    return <option key={name} value={name}>{name} {m.details ? `(${m.details})` : ''}</option>;
+                                })}
                             </select>
                             <div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '5px' }}>
@@ -76,7 +82,10 @@ const AgentMatrix = ({
                                 className="input-field"
                                 style={{ margin: 0 }}
                             >
-                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                {availableModels.map(m => {
+                                    const name = typeof m === 'string' ? m : m.name;
+                                    return <option key={name} value={name}>{name} {m.details ? `(${m.details})` : ''}</option>;
+                                })}
                             </select>
                             <div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', marginBottom: '5px' }}>

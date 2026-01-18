@@ -85,19 +85,14 @@ function Settings() {
         return () => clearInterval(interval);
     }, []);
 
-    const saveSettings = (newSettings) => {
+    const saveSettings = (newSettings, onSuccess) => {
         // Construct full settings object to save
-        // We can either save partial or full. Let's save full state for simplicity or what is passed.
-        // Actually, let's just save the current state.
-        // But state setters are async. Best to pass the updated object if possible,
-        // or just rely on current state if triggered by a button (state should be up to date).
-
         const settingsToSave = {
             agentConfigs,
             perfConfig,
             privacyConfig,
             systemPrompt,
-            ...newSettings // Override with specific updates if provided
+            ...newSettings
         };
 
         fetch('/api/settings', {
@@ -108,7 +103,7 @@ function Settings() {
             .then(res => res.json())
             .then(data => {
                 console.log(data.message);
-                // Optional: alert("Settings Saved");
+                if (onSuccess) onSuccess();
             })
             .catch(e => console.error("Failed to save settings", e));
     };
@@ -247,7 +242,11 @@ function Settings() {
                     availableModels={availableModels}
                     systemPrompt={systemPrompt}
                     setSystemPrompt={setSystemPrompt}
-                    handleSave={() => saveSettings({ agentConfigs, systemPrompt })}
+                    handleSave={() => {
+                        saveSettings({ agentConfigs, systemPrompt }, () => {
+                            alert("Settings Saved! \n\nAgents are now using the selected models.\n\nTo use a model not listed here, please install it from the 'Model Depot' tab or run 'ollama pull <model_name>'.");
+                        });
+                    }}
                 />;
             case 'depot':
                 return <ModelDepot

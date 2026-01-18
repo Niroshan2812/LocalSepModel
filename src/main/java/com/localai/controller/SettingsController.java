@@ -19,7 +19,7 @@ public class SettingsController {
     }
 
     @GetMapping("/models")
-    public java.util.List<String> getModels() {
+    public java.util.List<java.util.Map<String, Object>> getModels() {
         return modelManagerService.getAvailableModels();
     }
 

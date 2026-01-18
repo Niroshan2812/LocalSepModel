@@ -91,7 +91,7 @@ public class ModelManagerService {
         return isDownloading;
     }
 
-    public java.util.List<String> getAvailableModels() {
+    public java.util.List<java.util.Map<String, Object>> getAvailableModels() {
         try {
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -103,15 +103,37 @@ public class ModelManagerService {
                     java.net.http.HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200) {
-                // Parse JSON response: {"models": [{"name": "llama2:latest", ...}, ...]}
-                // quick and dirty parsing to avoid bulky DTOs for now, or use Jackson since we
-                // are in Spring Boot
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response.body());
-                java.util.List<String> models = new java.util.ArrayList<>();
+                java.util.List<java.util.Map<String, Object>> models = new java.util.ArrayList<>();
                 if (root.has("models")) {
                     for (com.fasterxml.jackson.databind.JsonNode node : root.get("models")) {
-                        models.add(node.get("name").asText());
+                        java.util.Map<String, Object> modelInfo = new java.util.HashMap<>();
+                        modelInfo.put("name", node.get("name").asText());
+
+                        // Parse size safely
+                        long sizeBytes = node.has("size") ? node.get("size").asLong() : 0;
+                        double sizeGb = sizeBytes / (1024.0 * 1024.0 * 1024.0);
+                        modelInfo.put("size", String.format("%.1f GB", sizeGb));
+
+                        if (node.has("details")) {
+                            com.fasterxml.jackson.databind.JsonNode details = node.get("details");
+                            String quant = details.has("quantization_level")
+                                    ? details.get("quantization_level").asText()
+                                    : "Unknown";
+                            String family = details.has("family") ? details.get("family").asText() : "";
+                            String params = details.has("parameter_size") ? details.get("parameter_size").asText() : "";
+
+                            modelInfo.put("quant", quant);
+                            modelInfo.put("family", family);
+                            modelInfo.put("details", params + " " + quant);
+                        } else {
+                            modelInfo.put("quant", "Unknown");
+                            modelInfo.put("family", "Unknown");
+                            modelInfo.put("details", "");
+                        }
+
+                        models.add(modelInfo);
                     }
                 }
                 return models;
@@ -120,7 +142,7 @@ public class ModelManagerService {
             logger.error("Failed to fetch models from Ollama", e);
         }
         // Fallback
-        return java.util.List.of(LITE_MODEL, "mistral:latest", "llama2:latest", "codellama:latest");
+        return new java.util.ArrayList<>();
     }
 
     private String getProModelPath() {
