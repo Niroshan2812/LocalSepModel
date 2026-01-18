@@ -5,7 +5,8 @@ const AgentMatrix = ({
     handleConfigChange,
     availableModels,
     systemPrompt,
-    setSystemPrompt
+    setSystemPrompt,
+    handleSave
 }) => {
     return (
         <div className="glass-panel" style={{ padding: '20px' }}>
@@ -100,7 +101,7 @@ const AgentMatrix = ({
                         style={{ width: '100%', resize: 'vertical' }}
                     />
                     <div style={{ textAlign: 'right', marginTop: '10px' }}>
-                        <button className="btn-primary" onClick={() => alert("Settings Saved!")}>Save Configuration</button>
+                        <button className="btn-primary" onClick={handleSave}>Save Configuration</button>
                     </div>
                 </div>
             </div>

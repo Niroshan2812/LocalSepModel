@@ -1,0 +1,31 @@
+{
+  "systemPrompt" : "Call me 'Sir', be concise, never use emojis.",
+  "privacyConfig" : {
+    "retentionHealth" : "never",
+    "retentionFinance" : "24h",
+    "redactLevel" : "high",
+    "localOnlyMode" : true,
+    "anonymizeLogs" : false
+  },
+  "agentConfigs" : {
+    "legal" : {
+      "personality" : 90,
+      "model" : "qwen2.5:0.5b"
+    },
+    "health" : {
+      "personality" : 20,
+      "model" : "qwen2.5:0.5b"
+    },
+    "finance" : {
+      "personality" : 80,
+      "model" : "qwen2.5:0.5b"
+    }
+  },
+  "perfConfig" : {
+    "contextWindow" : 4096,
+    "threadMode" : "auto",
+    "threadCount" : 4,
+    "gpuEnabled" : true,
+    "gpuLayers" : 25
+  }
+}

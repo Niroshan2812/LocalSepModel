@@ -91,6 +91,38 @@ public class ModelManagerService {
         return isDownloading;
     }
 
+    public java.util.List<String> getAvailableModels() {
+        try {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("http://localhost:11434/api/tags"))
+                    .GET()
+                    .build();
+
+            java.net.http.HttpResponse<String> response = client.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                // Parse JSON response: {"models": [{"name": "llama2:latest", ...}, ...]}
+                // quick and dirty parsing to avoid bulky DTOs for now, or use Jackson since we
+                // are in Spring Boot
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(response.body());
+                java.util.List<String> models = new java.util.ArrayList<>();
+                if (root.has("models")) {
+                    for (com.fasterxml.jackson.databind.JsonNode node : root.get("models")) {
+                        models.add(node.get("name").asText());
+                    }
+                }
+                return models;
+            }
+        } catch (Exception e) {
+            logger.error("Failed to fetch models from Ollama", e);
+        }
+        // Fallback
+        return java.util.List.of(LITE_MODEL, "mistral:latest", "llama2:latest", "codellama:latest");
+    }
+
     private String getProModelPath() {
         // AppData/Roaming/... or similar logic.
         // For simplicity, using a specific folder relative to run for now or user home.

@@ -47,6 +47,16 @@ function Settings() {
     });
 
     useEffect(() => {
+        // Fetch Settings from Backend
+        fetch('/api/settings')
+            .then(res => res.json())
+            .then(data => {
+                if (data.agentConfigs) setAgentConfigs(data.agentConfigs);
+                if (data.perfConfig) setPerfConfig(data.perfConfig);
+                if (data.privacyConfig) setPrivacyConfig(data.privacyConfig);
+            })
+            .catch(e => console.error("Failed to load settings", e));
+
         // Fetch model status for "Model Depot" transparency
         fetch('/api/upgrade/status')
             .then(res => res.json())
@@ -75,6 +85,34 @@ function Settings() {
         return () => clearInterval(interval);
     }, []);
 
+    const saveSettings = (newSettings) => {
+        // Construct full settings object to save
+        // We can either save partial or full. Let's save full state for simplicity or what is passed.
+        // Actually, let's just save the current state.
+        // But state setters are async. Best to pass the updated object if possible,
+        // or just rely on current state if triggered by a button (state should be up to date).
+
+        const settingsToSave = {
+            agentConfigs,
+            perfConfig,
+            privacyConfig,
+            systemPrompt,
+            ...newSettings // Override with specific updates if provided
+        };
+
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settingsToSave)
+        })
+            .then(res => res.json())
+            .then(data => {
+                console.log(data.message);
+                // Optional: alert("Settings Saved");
+            })
+            .catch(e => console.error("Failed to save settings", e));
+    };
+
     const sections = [
         { id: 'overview', label: 'Overview', icon: '🏠' },
         { id: 'matrix', label: 'Agent Matrix', icon: '🤖' },
@@ -84,20 +122,51 @@ function Settings() {
     ];
 
     const handleConfigChange = (agent, field, value) => {
-        setAgentConfigs(prev => ({
-            ...prev,
-            [agent]: { ...prev[agent], [field]: value }
-        }));
+        setAgentConfigs(prev => {
+            const updated = {
+                ...prev,
+                [agent]: { ...prev[agent], [field]: value }
+            };
+            // Debounced save could go here, or just manual save.
+            // For now, let's keep manual save on AgentMatrix, but update state.
+            return updated;
+        });
     };
 
-    const availableModels = ['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini', 'Qwen-Lite', 'Mistral-7B'];
+    const [availableModels, setAvailableModels] = useState([]);
+
+    useEffect(() => {
+        // Fetch Real Models
+        fetch('/api/settings/models')
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data) && data.length > 0) {
+                    setAvailableModels(data);
+                } else {
+                    // Fallback if API fails or returns empty
+                    setAvailableModels(['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini', 'Qwen-Lite']);
+                }
+            })
+            .catch(e => {
+                console.error("Failed to fetch models", e);
+                setAvailableModels(['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini']);
+            });
+    }, []);
 
     const handlePerfChange = (field, value) => {
-        setPerfConfig(prev => ({ ...prev, [field]: value }));
+        setPerfConfig(prev => {
+            const updated = { ...prev, [field]: value };
+            saveSettings({ perfConfig: updated }); // Auto-save for performance
+            return updated;
+        });
     };
 
     const handlePrivacyChange = (field, value) => {
-        setPrivacyConfig(prev => ({ ...prev, [field]: value }));
+        setPrivacyConfig(prev => {
+            const updated = { ...prev, [field]: value };
+            saveSettings({ privacyConfig: updated }); // Auto-save for privacy
+            return updated;
+        });
     };
 
     const handleNuke = () => {
@@ -178,6 +247,7 @@ function Settings() {
                     availableModels={availableModels}
                     systemPrompt={systemPrompt}
                     setSystemPrompt={setSystemPrompt}
+                    handleSave={() => saveSettings({ agentConfigs, systemPrompt })}
                 />;
             case 'depot':
                 return <ModelDepot
