@@ -8,17 +8,18 @@ public class JournalEntry {
     private String id;
     private LocalDateTime timestamp;
     private String encryptedContent; // Stored encrypted
-    private String mood; // "Positive", "Neutral", "Negative" (Lite Task result) - Stored plain for
-                         // indexing? Or encrypted? Let's keep plain for Lite task demo.
+    private String mood; // "Positive", "Neutral", "Negative"
+    private int sentimentScore; // 1-10
 
     public JournalEntry() {
     }
 
-    public JournalEntry(String id, LocalDateTime timestamp, String encryptedContent, String mood) {
+    public JournalEntry(String id, LocalDateTime timestamp, String encryptedContent, String mood, int sentimentScore) {
         this.id = id;
         this.timestamp = timestamp;
         this.encryptedContent = encryptedContent;
         this.mood = mood;
+        this.sentimentScore = sentimentScore;
     }
 
     public String getId() {
@@ -51,5 +52,13 @@ public class JournalEntry {
 
     public void setMood(String mood) {
         this.mood = mood;
+    }
+
+    public int getSentimentScore() {
+        return sentimentScore;
+    }
+
+    public void setSentimentScore(int sentimentScore) {
+        this.sentimentScore = sentimentScore;
     }
 }
