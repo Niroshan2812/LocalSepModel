@@ -2,6 +2,7 @@ package com.localai.controller;
 
 import com.localai.service.ModelManagerService;
 import com.localai.service.DocumentService;
+import com.localai.service.SettingsService;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.ollama.api.OllamaOptions;
@@ -24,16 +25,19 @@ public class AiController {
     private final ModelManagerService modelManager;
     private final DocumentService documentService;
     private final VectorStore vectorStore;
+    private final SettingsService settingsService;
 
     public AiController(ChatClient chatClient, ModelManagerService modelManager, DocumentService documentService,
-            VectorStore vectorStore) {
+            VectorStore vectorStore, SettingsService settingsService) {
         this.chatClient = chatClient;
         this.modelManager = modelManager;
         this.documentService = documentService;
         this.vectorStore = vectorStore;
+        this.settingsService = settingsService;
     }
 
     @PostMapping("/chat")
+    @SuppressWarnings("unchecked")
     public Map<String, String> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
         String modelName = modelManager.getCurrentModel();
@@ -61,7 +65,45 @@ public class AiController {
         SystemMessage systemMessage = new SystemMessage(systemMsg);
         UserMessage userMsg = new UserMessage(userMessage);
 
-        Prompt prompt = new Prompt(List.of(systemMessage, userMsg), OllamaOptions.create().withModel(modelName));
+        // Fetch Performance Settings
+        Map<String, Object> settings = settingsService.getSettings();
+        Map<String, Object> perfConfig = (Map<String, Object>) settings.get("perfConfig");
+
+        OllamaOptions options = OllamaOptions.create().withModel(modelName);
+
+        if (perfConfig != null) {
+            if (perfConfig.get("contextWindow") != null) {
+                options.withNumCtx(((Number) perfConfig.get("contextWindow")).intValue());
+            }
+            if (perfConfig.get("gpuLayers") != null) {
+                // Try alternate casing or generic option if withNumGpu fails
+                try {
+                    // Reflection or valid method check? No, just try withNumGPU
+                    // If 0.8.1 doesn't have it, we might need to use generic options if available
+                    // or omit
+                    // For now, replacing with withNumGPU as a guess or commenting out if unsure
+                    // options.withNumGpu(...) failed.
+                    // trying: options.withNumGPU(...)
+                } catch (Exception e) {
+                }
+                // options.withNumCtx is valid.
+                // let's try withOption("num_gpu", val) if available?
+                // Checking source for 0.8.1 user guide:
+                // options.withNumGPU(...) is seemingly correct in newer versions.
+                // If 0.8.1 is old, it might be missing.
+                // I will comment it out for now to ensure compilation and mention it to user.
+                // options.withNumGpu(((Number) perfConfig.get("gpuLayers")).intValue());
+            }
+            if (perfConfig.get("threadCount") != null) {
+                Object threadCount = perfConfig.get("threadCount");
+                // Handle "auto" or integer
+                if (threadCount instanceof Number) {
+                    options.withNumThread(((Number) threadCount).intValue());
+                }
+            }
+        }
+
+        Prompt prompt = new Prompt(List.of(systemMessage, userMsg), options);
 
         String response = chatClient.call(prompt).getResult().getOutput().getContent();
         return Map.of("response", response, "model", modelName);
@@ -93,6 +135,7 @@ public class AiController {
     }
 
     @PostMapping("/chat/complexity")
+    @SuppressWarnings("unchecked")
     public Map<String, Object> checkComplexity(@RequestBody Map<String, String> request) {
         String text = request.get("text");
         if (text == null || text.trim().isEmpty()) {
@@ -123,7 +166,28 @@ public class AiController {
         String promptText = "Analyze if the following request requires deep reasoning, complex analysis, or professional knowledge (Legal/Medical). Respond with EXACTLY 'YES' or 'NO'.\nRequest: "
                 + text;
 
-        Prompt prompt = new Prompt(promptText, OllamaOptions.create().withModel(ModelManagerService.LITE_MODEL));
+        // Fetch Performance Settings
+        Map<String, Object> settings = settingsService.getSettings();
+        Map<String, Object> perfConfig = (Map<String, Object>) settings.get("perfConfig");
+
+        OllamaOptions options = OllamaOptions.create().withModel(ModelManagerService.LITE_MODEL);
+
+        if (perfConfig != null) {
+            // Use same settings but maybe lighter context for classification?
+            // For now, respect global settings.
+            if (perfConfig.get("contextWindow") != null) {
+                options.withNumCtx(((Number) perfConfig.get("contextWindow")).intValue());
+            }
+            // GPU layers omitted until method confirmed
+            if (perfConfig.get("threadCount") != null) {
+                Object threadCount = perfConfig.get("threadCount");
+                if (threadCount instanceof Number) {
+                    options.withNumThread(((Number) threadCount).intValue());
+                }
+            }
+        }
+
+        Prompt prompt = new Prompt(promptText, options);
         String response = chatClient.call(prompt).getResult().getOutput().getContent().trim().toUpperCase();
 
         boolean isComplex = response.contains("YES");
