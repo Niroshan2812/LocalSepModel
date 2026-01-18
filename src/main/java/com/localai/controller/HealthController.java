@@ -34,7 +34,8 @@ public class HealthController {
             JournalEntry entry = healthService.createEntry(content, password);
             // Return decrypted version immediately to UI
             return Map.of("status", "success", "entry",
-                    new HealthService.DecryptedEntry(entry.getId(), entry.getTimestamp(), content, entry.getMood()));
+                    new HealthService.DecryptedEntry(entry.getId(), entry.getTimestamp(), content, entry.getMood(),
+                            entry.getSentimentScore()));
         } catch (Exception e) {
             return Map.of("status", "error", "message", e.getMessage());
         }
@@ -55,6 +56,19 @@ public class HealthController {
     @PostMapping("/chat")
     public Map<String, String> therapyChat(@RequestBody Map<String, String> request) {
         String message = request.get("message");
+
+        // CRITICAL SAFETY GUARDRAIL
+        String lowerMsg = message.toLowerCase();
+        if (lowerMsg.contains("suicide") || lowerMsg.contains("kill myself") || lowerMsg.contains("want to die")
+                || lowerMsg.contains("end it all") || lowerMsg.contains("self-harm")) {
+            return Map.of("response",
+                    "PLEASE STOP. If you are in danger, please call emergency services immediately.\n\n" +
+                            "🇺🇸 USA: 988 (Suicide & Crisis Lifeline)\n" +
+                            "🇬🇧 UK: 111 or 999\n" +
+                            "🇨🇦 Canada: 988\n\n" +
+                            "You are not alone. Please reach out to a professional.");
+        }
+
         // Pro Task: Therapist Persona
         String systemPrompt = "You are a compassionate, licensed therapist. Your goal is to listen effectively and identify cognitive distortions (like catastrophizing, black-and-white thinking). Respond with empathy. Keep responses concise.";
 

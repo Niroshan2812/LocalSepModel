@@ -32,13 +32,14 @@ public class HealthService {
 
     public JournalEntry createEntry(String content, String password) throws Exception {
         String encrypted = encryptionService.encrypt(content, password);
-        String mood = analyzeSentiment(content); // Lite Task
+        SentimentResult sentiment = analyzeSentimentDetail(content);
 
         JournalEntry entry = new JournalEntry(
                 UUID.randomUUID().toString(),
                 LocalDateTime.now(),
                 encrypted,
-                mood);
+                sentiment.label,
+                sentiment.score);
 
         saveEntry(entry);
         return entry;
@@ -60,7 +61,7 @@ public class HealthService {
         return entries.stream().map(e -> {
             try {
                 String plain = encryptionService.decrypt(e.getEncryptedContent(), password);
-                return new DecryptedEntry(e.getId(), e.getTimestamp(), plain, e.getMood());
+                return new DecryptedEntry(e.getId(), e.getTimestamp(), plain, e.getMood(), e.getSentimentScore());
             } catch (Exception ex) {
                 // Wrong password or corrupt
                 return null;
@@ -68,17 +69,33 @@ public class HealthService {
         }).filter(java.util.Objects::nonNull).collect(Collectors.toList());
     }
 
-    // Lite Task: Simple Heuristic Sentiment
-    private String analyzeSentiment(String text) {
-        String lower = text.toLowerCase();
-        int positive = countMatches(lower, "good", "happy", "great", "excellent", "love", "hope", "calm");
-        int negative = countMatches(lower, "bad", "sad", "angry", "hate", "anxious", "stress", "tired", "pain");
+    private record SentimentResult(String label, int score) {
+    }
 
-        if (positive > negative)
-            return "Positive";
-        if (negative > positive)
-            return "Negative";
-        return "Neutral";
+    // Lite Task: Simple Heuristic Sentiment
+    private SentimentResult analyzeSentimentDetail(String text) {
+        String lower = text.toLowerCase();
+        int positive = countMatches(lower, "good", "happy", "great", "excellent", "love", "hope", "calm", "grateful",
+                "excited", "proud");
+        int negative = countMatches(lower, "bad", "sad", "angry", "hate", "anxious", "stress", "tired", "pain",
+                "lonely", "depressed");
+
+        int score = 5 + (positive - negative);
+        // Clamp 1-10
+        score = Math.max(1, Math.min(10, score));
+
+        String label = "Neutral";
+        if (score >= 7)
+            label = "Positive";
+        else if (score <= 4)
+            label = "Negative";
+
+        return new SentimentResult(label, score);
+    }
+
+    // Kept for backward compat if needed, but not used by new createEntry
+    private String analyzeSentiment(String text) {
+        return analyzeSentimentDetail(text).label;
     }
 
     private int countMatches(String text, String... words) {
@@ -104,6 +121,6 @@ public class HealthService {
     }
 
     // Helper DTO for UI
-    public record DecryptedEntry(String id, LocalDateTime timestamp, String content, String mood) {
+    public record DecryptedEntry(String id, LocalDateTime timestamp, String content, String mood, int sentimentScore) {
     }
 }

@@ -67,6 +67,39 @@ function HealthWorkflow() {
         }
     };
 
+    // Helper to render Mood Graph
+    const renderMoodGraph = () => {
+        if (entries.length === 0) return null;
+        // Take last 7 entries
+        const recent = entries.slice(-7);
+        // Max height 50px
+        return (
+            <div className="glass-panel" style={{ padding: '15px', marginBottom: '10px' }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', opacity: 0.8 }}>Mood Trend (Last 7 Entries)</h4>
+                <div style={{ display: 'flex', alignItems: 'flex-end', height: '60px', gap: '5px' }}>
+                    {recent.map((e, i) => {
+                        const score = e.sentimentScore || 5; // Default to 5 if missing
+                        const height = (score / 10) * 100;
+                        const color = score >= 7 ? '#4ade80' : score <= 4 ? '#f87171' : '#fbbf24';
+                        return (
+                            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                                <div style={{
+                                    width: '100%',
+                                    height: `${height}%`,
+                                    background: color,
+                                    borderRadius: '4px',
+                                    opacity: 0.8,
+                                    transition: 'height 0.3s'
+                                }}></div>
+                                <div style={{ fontSize: '0.6rem', opacity: 0.5 }}>{new Date(e.timestamp).getDate()}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
     if (isLocked) {
         return (
             <div style={{ padding: '50px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', color: 'white' }}>
@@ -86,6 +119,8 @@ function HealthWorkflow() {
             </div>
         );
     }
+
+    const isEmergency = chatResponse.includes("PLEASE STOP") || chatResponse.includes("988");
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '20px', gap: '20px', color: 'white' }}>
@@ -120,15 +155,20 @@ function HealthWorkflow() {
                         <button className="btn-primary" onClick={handleAddEntry}>Save</button>
                     </div>
 
+                    {renderMoodGraph()}
+
                     {/* Feed */}
                     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '5px' }}>
                         {entries.slice().reverse().map((entry) => (
                             <div key={entry.id} className="glass-panel" style={{ padding: '15px', background: 'rgba(255,255,255,0.05)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', opacity: 0.7, fontSize: '0.8rem' }}>
                                     <span>{new Date(entry.timestamp).toLocaleString()}</span>
-                                    <span style={{
-                                        color: entry.mood === 'Positive' ? '#4ade80' : entry.mood === 'Negative' ? '#f87171' : '#fbbf24'
-                                    }}>Mode: {entry.mood}</span>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <span style={{
+                                            color: entry.mood === 'Positive' ? '#4ade80' : entry.mood === 'Negative' ? '#f87171' : '#fbbf24'
+                                        }}>{entry.mood}</span>
+                                        {entry.sentimentScore && <span style={{ opacity: 0.5, fontSize: '0.7rem', border: '1px solid white', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{entry.sentimentScore}</span>}
+                                    </div>
                                 </div>
                                 <div>{entry.content}</div>
                             </div>
@@ -141,8 +181,16 @@ function HealthWorkflow() {
                     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginBottom: '20px' }}>
                         <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🧠</div>
                         {chatResponse ? (
-                            <div style={{ background: 'rgba(139, 92, 246, 0.2)', padding: '20px', borderRadius: '15px', maxWidth: '80%', lineHeight: '1.6' }}>
-                                <strong>Therapist:</strong> {chatResponse}
+                            <div style={{
+                                background: isEmergency ? 'rgba(239, 68, 68, 0.2)' : 'rgba(139, 92, 246, 0.2)',
+                                padding: '20px',
+                                borderRadius: '15px',
+                                maxWidth: '80%',
+                                lineHeight: '1.6',
+                                border: isEmergency ? '1px solid #ef4444' : 'none'
+                            }}>
+                                <strong>{isEmergency ? '🚨 EMERGENCY SYSTEM:' : 'Therapist:'}</strong>
+                                <div style={{ whiteSpace: 'pre-wrap' }}>{chatResponse}</div>
                             </div>
                         ) : (
                             <div style={{ opacity: 0.5 }}>Tell me what's on your mind...</div>
