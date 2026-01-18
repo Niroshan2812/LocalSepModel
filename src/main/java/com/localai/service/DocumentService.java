@@ -68,6 +68,13 @@ public class DocumentService {
             List<Document> documents = pdfReader.get();
             logger.info("Extracted {} pages/documents from PDF.", documents.size());
 
+            // Collect full text for Frontend ("Stateless" Legal Utils)
+            StringBuilder fullText = new StringBuilder();
+            for (Document doc : documents) {
+                fullText.append(doc.getContent()).append("\n\n");
+            }
+            metadata.put("extracted_text", fullText.toString());
+
             // 3. Split into tokens (Chunks)
             TokenTextSplitter splitter = new TokenTextSplitter();
             List<Document> chunks = splitter.apply(documents);
