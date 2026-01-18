@@ -20,15 +20,36 @@ function Settings() {
     });
     const [systemPrompt, setSystemPrompt] = useState("Call me 'Sir', be concise, never use emojis.");
 
-    const [installedModels, setInstalledModels] = useState([
-        { name: 'Llama-3-Finance', size: '4.7GB', quant: 'q4_k_m' },
-        { name: 'Mistral-OpenOrca', size: '4.1GB', quant: 'q5_k_m' },
-        { name: 'Phi-3-Mini', size: '1.8GB', quant: 'q8_0' }
-    ]);
+    // installedModels moved below
     const [searchQuery, setSearchQuery] = useState('');
-    const [downloadQueue, setDownloadQueue] = useState([
-        { name: 'DeepSeek-Coder', progress: 45, speed: '12MB/s', eta: '2m' }
-    ]);
+    const [downloadQueue, setDownloadQueue] = useState([]);
+
+    useEffect(() => {
+        const fetchDownloads = () => {
+            fetch('/api/settings/downloads')
+                .then(res => res.json())
+                .then(data => setDownloadQueue(data))
+                .catch(e => console.error(e));
+        };
+        fetchDownloads(); // Initial
+        const interval = setInterval(fetchDownloads, 1000); // Poll every 1s
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleCancelDownload = (modelName) => {
+        fetch('/api/settings/downloads/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelName })
+        })
+            .then(res => res.json())
+            .then(data => {
+                console.log(data.message);
+                // Quick local update while waiting for poll
+                setDownloadQueue(prev => prev.filter(d => d.name !== modelName));
+            })
+            .catch(e => alert("Failed to cancel: " + e));
+    };
 
     const [perfConfig, setPerfConfig] = useState({
         contextWindow: 4096,
@@ -128,6 +149,7 @@ function Settings() {
         });
     };
 
+    const [installedModels, setInstalledModels] = useState([]);
     const [availableModels, setAvailableModels] = useState([]);
 
     useEffect(() => {
@@ -137,13 +159,21 @@ function Settings() {
             .then(data => {
                 if (Array.isArray(data) && data.length > 0) {
                     setAvailableModels(data);
+                    setInstalledModels(data);
                 } else {
                     // Fallback if API fails or returns empty
-                    setAvailableModels(['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini', 'Qwen-Lite']);
+                    // Don't show confusing mocks in Depot if we can't connect, show empty or error?
+                    // The user confusion comes from seeing "Llama-3-Finance" when they don't have it.
+                    // Let's set installedModels to empty if failure, but availableModels to strings for fallback dropdowns maybe?
+                    // Actually user WANTS to know if they are installed.
+                    // If connection fails, we assume NO models installed visible to us.
+                    setInstalledModels([]);
+                    setAvailableModels(['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini']);
                 }
             })
             .catch(e => {
                 console.error("Failed to fetch models", e);
+                setInstalledModels([]);
                 setAvailableModels(['Llama-3-Finance', 'Mistral-OpenOrca', 'Phi-3-Mini']);
             });
     }, []);
@@ -256,6 +286,7 @@ function Settings() {
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
                     downloadQueue={downloadQueue}
+                    handleCancelDownload={handleCancelDownload}
                 />;
             case 'performance':
                 return <PerformanceSettings

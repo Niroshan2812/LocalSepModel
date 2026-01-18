@@ -6,7 +6,8 @@ const ModelDepot = ({
     handleDeleteModel,
     searchQuery,
     setSearchQuery,
-    downloadQueue
+    downloadQueue,
+    handleCancelDownload
 }) => {
     // Curated Curated Store Data (Mocked Registry)
     const curatedStoreModels = [
@@ -31,9 +32,60 @@ const ModelDepot = ({
         setSearchQuery(tag); // Or filter locally specific way
     };
 
+    const [confirmModal, setConfirmModal] = React.useState(null);
+
+    const handlePull = (model) => {
+        setConfirmModal(model);
+    };
+
+    const confirmPull = () => {
+        if (!confirmModal) return;
+        const modelName = confirmModal.name;
+
+        // API Call
+        fetch('/api/settings/pull', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelName })
+        })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message);
+                // Optionally add to download queue mock
+                downloadQueue.push({ name: modelName, progress: 0, speed: 'Starting...', eta: 'calculating...' });
+            })
+            .catch(e => alert("Failed to initiate pull: " + e));
+
+        setConfirmModal(null);
+    };
+
     return (
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        <div className="glass-panel" style={{ padding: '20px', position: 'relative' }}>
             <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px', marginBottom: '20px' }}>Model Depot</h3>
+
+            {/* Confirmation Modal */}
+            {confirmModal && (
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.8)', zIndex: 10,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div style={{ background: '#1e293b', padding: '20px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.2)', maxWidth: '400px', width: '90%' }}>
+                        <h4 style={{ marginTop: 0 }}>Confirm Download</h4>
+                        <p style={{ opacity: 0.8 }}>Are you sure you want to download <strong>{confirmModal.name}</strong>?</p>
+                        <div style={{ fontSize: '0.8rem', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '5px', marginBottom: '15px' }}>
+                            <div><strong>Description:</strong> {confirmModal.description}</div>
+                            <div style={{ marginTop: '5px' }}><strong>Tags:</strong> {confirmModal.tags.join(', ')}</div>
+                            <div style={{ marginTop: '5px', color: '#fbbf24' }}>⚠️ Large Download. Ensure you have disk space.</div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button className="btn-secondary" onClick={() => setConfirmModal(null)}>Cancel</button>
+                            <button className="btn-primary" onClick={confirmPull}>Yes, Pull Model</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 {/* Left Col: Installed Models */}
@@ -105,7 +157,7 @@ const ModelDepot = ({
                                         {m.tags.map(t => <span key={t} style={{ fontSize: '0.6rem', background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>{t}</span>)}
                                     </div>
                                 </div>
-                                <button className="btn-primary" style={{ fontSize: '0.8rem', padding: '5px 10px' }} onClick={() => alert(`To install, run: ollama pull ${m.name}`)}>Pull</button>
+                                <button className="btn-primary" style={{ fontSize: '0.8rem', padding: '5px 10px' }} onClick={() => handlePull(m)}>Pull</button>
                             </div>
                         ))}
                         {filteredStore.length === 0 && <div style={{ opacity: 0.5, textAlign: 'center' }}>No models match your search.</div>}
@@ -118,13 +170,27 @@ const ModelDepot = ({
                             {downloadQueue.map((dl, idx) => (
                                 <div key={idx} style={{ background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '5px' }}>
-                                        <span>{dl.name}</span>
-                                        <span>{dl.progress}%</span>
+                                        <div style={{ fontWeight: 'bold' }}>{dl.name}</div>
+                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                            <span>{dl.progress}%</span>
+                                            <button
+                                                onClick={() => handleCancelDownload(dl.name)}
+                                                style={{
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    color: '#ef4444', fontSize: '0.8rem', padding: 0
+                                                }}
+                                                title="Cancel Download"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
                                     </div>
                                     <div style={{ width: '100%', height: '6px', background: '#333', borderRadius: '3px', overflow: 'hidden' }}>
                                         <div style={{ width: `${dl.progress}%`, height: '100%', background: '#3b82f6', transition: 'width 0.2s' }}></div>
                                     </div>
-                                    <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>{dl.speed} • {dl.eta} remaining</div>
+                                    <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '4px' }}>
+                                        {dl.speed || 'Calculating...'} • {dl.eta || '...'} remaining • <span style={{ textTransform: 'capitalize' }}>{dl.status || ' Pending'}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>

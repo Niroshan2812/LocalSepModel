@@ -23,6 +23,31 @@ public class SettingsController {
         return modelManagerService.getAvailableModels();
     }
 
+    @PostMapping("/pull")
+    public Map<String, Object> pullModel(@RequestBody Map<String, String> payload) {
+        String modelName = payload.get("model");
+        if (modelName == null || modelName.isEmpty()) {
+            return Map.of("status", "error", "message", "Model name is required");
+        }
+        modelManagerService.pullModel(modelName);
+        return Map.of("status", "success", "message", "Pull initiated for " + modelName);
+    }
+
+    @GetMapping("/downloads")
+    public java.util.List<java.util.Map<String, Object>> getDownloads() {
+        return modelManagerService.getActiveDownloads();
+    }
+
+    @PostMapping("/downloads/cancel")
+    public Map<String, Object> cancelDownload(@RequestBody Map<String, String> payload) {
+        String modelName = payload.get("model");
+        if (modelName == null || modelName.isEmpty()) {
+            return Map.of("status", "error", "message", "Model name is required");
+        }
+        modelManagerService.cancelPull(modelName);
+        return Map.of("status", "success", "message", "Cancelled download for " + modelName);
+    }
+
     @GetMapping
     public Map<String, Object> getSettings() {
         return settingsService.getSettings();

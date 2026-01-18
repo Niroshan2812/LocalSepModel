@@ -145,6 +145,97 @@ public class ModelManagerService {
         return new java.util.ArrayList<>();
     }
 
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.Map<String, Object>> activeDownloads = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, CompletableFuture<Void>> activePullFutures = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public void pullModel(String modelName) {
+        if (activePullFutures.containsKey(modelName)) {
+            logger.info("Model {} is already downloading.", modelName);
+            return;
+        }
+
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            try {
+                logger.info("Initiating streaming pull for model: {}", modelName);
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                // stream: true for progress updates
+                String jsonBody = String.format("{\"name\": \"%s\", \"stream\": true}", modelName);
+
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create("http://localhost:11434/api/pull"))
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .header("Content-Type", "application/json")
+                        .build();
+
+                // Streaming response
+                client.send(request, java.net.http.HttpResponse.BodyHandlers.ofLines())
+                        .body()
+                        .forEach(line -> {
+                            if (Thread.currentThread().isInterrupted()) {
+                                throw new RuntimeException("Download interrupted");
+                            }
+                            try {
+                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(line);
+
+                                java.util.Map<String, Object> status = new java.util.HashMap<>();
+                                status.put("name", modelName);
+                                status.put("status", node.has("status") ? node.get("status").asText() : "downloading");
+
+                                if (node.has("total") && node.has("completed")) {
+                                    long total = node.get("total").asLong();
+                                    long completed = node.get("completed").asLong();
+                                    double progress = (double) completed / total * 100;
+                                    status.put("progress", (int) progress);
+                                    status.put("total", total);
+                                    status.put("completed", completed);
+
+                                    // Simple speed/eta calculation could go here (omitted for brevity)
+                                    status.put("speed", "Downloading..."); // Placeholder
+                                    status.put("eta", "..."); // Placeholder
+                                } else {
+                                    // Initial phases (pulling manifest) might not have total/completed
+                                    status.put("progress", 0);
+                                    status.put("speed", "Initializing...");
+                                    status.put("eta", "...");
+                                }
+
+                                activeDownloads.put(modelName, status);
+
+                                if (node.has("status") && "success".equals(node.get("status").asText())) {
+                                    logger.info("Download complete for {}", modelName);
+                                    activeDownloads.remove(modelName);
+                                }
+                            } catch (Exception e) {
+                                logger.error("Error parsing streaming response for " + modelName, e);
+                            }
+                        });
+
+            } catch (Exception e) {
+                logger.error("Error pulling model: " + modelName, e);
+            } finally {
+                activeDownloads.remove(modelName);
+                activePullFutures.remove(modelName);
+            }
+        });
+
+        activePullFutures.put(modelName, future);
+    }
+
+    public void cancelPull(String modelName) {
+        CompletableFuture<Void> future = activePullFutures.get(modelName);
+        if (future != null) {
+            future.cancel(true); // Interrupt
+            activePullFutures.remove(modelName);
+            activeDownloads.remove(modelName);
+            logger.info("Cancelled download for {}", modelName);
+        }
+    }
+
+    public java.util.List<java.util.Map<String, Object>> getActiveDownloads() {
+        return new java.util.ArrayList<>(activeDownloads.values());
+    }
+
     private String getProModelPath() {
         // AppData/Roaming/... or similar logic.
         // For simplicity, using a specific folder relative to run for now or user home.
