@@ -11,11 +11,14 @@ public class SettingsController {
 
     private final SettingsService settingsService;
     private final com.localai.service.ModelManagerService modelManagerService;
+    private final com.localai.service.DocumentService documentService;
 
     public SettingsController(SettingsService settingsService,
-            com.localai.service.ModelManagerService modelManagerService) {
+            com.localai.service.ModelManagerService modelManagerService,
+            com.localai.service.DocumentService documentService) {
         this.settingsService = settingsService;
         this.modelManagerService = modelManagerService;
+        this.documentService = documentService;
     }
 
     @GetMapping("/models")
@@ -63,5 +66,12 @@ public class SettingsController {
     public Map<String, Object> resetSettings() {
         settingsService.resetSettings();
         return Map.of("status", "success", "message", "Settings reset to defaults");
+    }
+
+    @PostMapping("/nuke")
+    public Map<String, Object> nukeContext() {
+        documentService.clearStore();
+        return Map.of("status", "success", "message",
+                "Context Nuked (Persistence Cleared). Restart for full memory wipe.");
     }
 }

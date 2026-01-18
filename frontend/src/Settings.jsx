@@ -196,8 +196,14 @@ function Settings() {
 
     const handleNuke = () => {
         if (confirm("⚠️ NUKE CONTEXT? \n\nThis will instantly wipe ALL active RAM, Chat History, and Temporary Buffers.\nThis action is irreversible.")) {
-            alert("💥 NUKE INITIATED.\n\n- RAM Cleared\n- History Wiped\n- Buffers Flushed");
-            setSystemStats(prev => ({ ...prev, ram: 10, vram: 5 })); // Simulating wipe
+            // Call Backend Nuke
+            fetch('/api/settings/nuke', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    alert("💥 " + data.message);
+                    setSystemStats(prev => ({ ...prev, ram: 10, vram: 5 })); // Visual feedback
+                })
+                .catch(e => alert("Nuke Failed: " + e));
         }
     };
 

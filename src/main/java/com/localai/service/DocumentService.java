@@ -99,4 +99,21 @@ public class DocumentService {
             Files.deleteIfExists(tempFile);
         }
     }
+
+    public void clearStore() {
+        try {
+            File storeFile = new File("vectorstore.json");
+            if (storeFile.exists()) {
+                if (storeFile.delete()) {
+                    logger.info("Vector Store persistence file deleted (Nuked).");
+                } else {
+                    logger.error("Failed to delete Vector Store file.");
+                }
+            }
+            // Ideally we also clear in-memory map. SimpleVectorStore might not expose this.
+            // But deleting the file ensures next load is clean.
+        } catch (Exception e) {
+            logger.error("Error clearing vector store", e);
+        }
+    }
 }

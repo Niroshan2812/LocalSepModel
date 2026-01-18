@@ -3,6 +3,7 @@ package com.localai.controller;
 import com.localai.service.ModelManagerService;
 import com.localai.service.DocumentService;
 import com.localai.service.SettingsService;
+import com.localai.service.PrivacyService;
 import org.springframework.ai.chat.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.ollama.api.OllamaOptions;
@@ -26,20 +27,42 @@ public class AiController {
     private final DocumentService documentService;
     private final VectorStore vectorStore;
     private final SettingsService settingsService;
+    private final PrivacyService privacyService;
 
     public AiController(ChatClient chatClient, ModelManagerService modelManager, DocumentService documentService,
-            VectorStore vectorStore, SettingsService settingsService) {
+            VectorStore vectorStore, SettingsService settingsService, PrivacyService privacyService) {
         this.chatClient = chatClient;
         this.modelManager = modelManager;
         this.documentService = documentService;
         this.vectorStore = vectorStore;
         this.settingsService = settingsService;
+        this.privacyService = privacyService;
     }
 
     @PostMapping("/chat")
     @SuppressWarnings("unchecked")
     public Map<String, String> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
+
+        // --- Privacy Layer ---
+        Map<String, Object> settings = settingsService.getSettings();
+        Map<String, Object> privacyConfig = (Map<String, Object>) settings.get("privacyConfig");
+
+        if (privacyConfig != null) {
+            String redactLevel = (String) privacyConfig.get("redactLevel");
+            // Default to 'high' if config exists but field is missing? Or 'none'. Protocol
+            // says default is 'high' in UI.
+            if (redactLevel != null) {
+                String redactedMessage = privacyService.redact(userMessage, redactLevel);
+                if (!redactedMessage.equals(userMessage)) {
+                    System.out.println(
+                            "PII Redacted: " + (userMessage.length() - redactedMessage.length()) + " chars hidden.");
+                    userMessage = redactedMessage;
+                }
+            }
+        }
+        // ---------------------
+
         String modelName = modelManager.getCurrentModel();
 
         // RAG: Retrieval Augmented Generation
@@ -66,7 +89,6 @@ public class AiController {
         UserMessage userMsg = new UserMessage(userMessage);
 
         // Fetch Performance Settings
-        Map<String, Object> settings = settingsService.getSettings();
         Map<String, Object> perfConfig = (Map<String, Object>) settings.get("perfConfig");
 
         OllamaOptions options = OllamaOptions.create().withModel(modelName);
