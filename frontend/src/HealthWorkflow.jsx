@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useAI } from './AIContext';
 
 function HealthWorkflow() {
     const [isLocked, setIsLocked] = useState(true);
@@ -8,6 +9,7 @@ function HealthWorkflow() {
     const [chatMessage, setChatMessage] = useState('');
     const [chatResponse, setChatResponse] = useState('');
     const [mode, setMode] = useState('journal'); // 'journal' or 'chat'
+    const { startTask, endTask } = useAI();
 
     const handleUnlock = async () => {
         try {
@@ -49,6 +51,7 @@ function HealthWorkflow() {
     const handleChat = async () => {
         if (!chatMessage.trim()) return;
         setChatResponse("Thinking...");
+        startTask("Therapist Thinking...", "Llama-3-Health");
         try {
             const res = await fetch('/api/health/chat', {
                 method: 'POST',
@@ -59,6 +62,8 @@ function HealthWorkflow() {
             setChatResponse(data.response);
         } catch (e) {
             setChatResponse("Error connecting to therapist.");
+        } finally {
+            endTask();
         }
     };
 

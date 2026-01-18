@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import UpgradeModal from './UpgradeModal';
+import { useAI } from './AIContext';
 
 function LegalWorkflow() {
     const [messages, setMessages] = useState([
@@ -13,6 +14,7 @@ function LegalWorkflow() {
     const [uploadedFile, setUploadedFile] = useState(null);
     const [docMetadata, setDocMetadata] = useState(null);
     const fileInputRef = useRef(null);
+    const { startTask, endTask } = useAI();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,6 +41,7 @@ function LegalWorkflow() {
         formData.append('file', file);
 
         setMessages(prev => [...prev, { role: 'assistant', content: `Indexing ${file.name}...` }]);
+        startTask(`Indexing ${file.name}`, "OCR-Engine");
 
         try {
             const res = await fetch('/api/docs/upload', {
@@ -56,6 +59,8 @@ function LegalWorkflow() {
         } catch (err) {
             console.error(err);
             setMessages(prev => [...prev, { role: 'assistant', content: 'Error uploading document.' }]);
+        } finally {
+            endTask();
         }
     };
 
@@ -64,6 +69,7 @@ function LegalWorkflow() {
 
         if (currentModel === 'Lite') {
             try {
+                // startTask("Checking Complexity...", "Qwen-Lite"); // Optional: showing this might be too flashy for a quick check
                 const checkRes = await fetch('/api/chat/complexity', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -87,6 +93,7 @@ function LegalWorkflow() {
         setMessages(prev => [...prev, userMessage]);
         setInput('');
         setIsLoading(true);
+        startTask("Analyzing Query...", currentModel === 'Lite' ? "Qwen-Lite" : "Mistral-7B");
 
         try {
             const response = await fetch('/api/chat', {
@@ -102,6 +109,7 @@ function LegalWorkflow() {
             setMessages(prev => [...prev, { role: 'assistant', content: 'Connection error.' }]);
         } finally {
             setIsLoading(false);
+            endTask();
         }
     };
 

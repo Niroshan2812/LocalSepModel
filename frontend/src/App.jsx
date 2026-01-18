@@ -3,8 +3,49 @@ import './index.css';
 import LegalWorkflow from './LegalWorkflow';
 import FinanceWorkflow from './FinanceWorkflow';
 import HealthWorkflow from './HealthWorkflow';
+import { AIProvider, useAI } from './AIContext';
 
-function App() {
+const StatusHeader = () => {
+  const { activeTask } = useAI();
+  return (
+    <div style={{ position: 'absolute', top: 0, right: 0, padding: '20px', display: 'flex', gap: '15px', alignItems: 'center', zIndex: 100 }}>
+      {/* Processing Indicator */}
+      {activeTask && (
+        <div className="glass-panel" style={{
+          padding: '8px 15px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          background: 'rgba(96, 165, 250, 0.2)',
+          border: '1px solid rgba(96, 165, 250, 0.3)',
+          animation: 'pulse 2s infinite'
+        }}>
+          <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <div style={{ fontSize: '0.85rem' }}>
+            <span style={{ opacity: 0.7 }}>Thinking... </span>
+            <span style={{ fontWeight: 'bold' }}>{activeTask.model}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Local Only Badge */}
+      <div className="glass-panel" style={{
+        padding: '8px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        background: 'rgba(16, 185, 129, 0.15)',
+        border: '1px solid rgba(16, 185, 129, 0.3)',
+        color: '#4ade80'
+      }}>
+        <span style={{ fontSize: '1rem' }}>🛡️</span>
+        <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Offline Mode</span>
+      </div>
+    </div>
+  );
+}
+
+function AppContent() {
   const [activeTab, setActiveTab] = useState('legal');
 
   const renderContent = () => {
@@ -57,12 +98,21 @@ function App() {
       </div>
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, position: 'relative' }}>
-        {renderContent()}
+      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <StatusHeader />
+        <div style={{ flex: 1, overflow: 'hidden', paddingTop: '60px' }}> {/* Padding for header */}
+          {renderContent()}
+        </div>
       </div>
 
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AIProvider>
+      <AppContent />
+    </AIProvider>
+  );
+}

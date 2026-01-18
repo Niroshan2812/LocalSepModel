@@ -26,18 +26,29 @@ public class FinanceService {
 
     private static final Logger logger = LoggerFactory.getLogger(FinanceService.class);
 
-    // Lite Task: Deterministic Categorization Rules
-    private static final Map<String, String[]> CATEGORY_RULES = new HashMap<>();
+    // Dynamic Categorization Rules
+    private final Map<String, List<String>> categoryRules = new HashMap<>();
 
-    static {
-        CATEGORY_RULES.put("Food", new String[] { "restaurant", "cafe", "coffee", "burger", "pizza", "kfc", "mcdonalds",
-                "grocery", "supermarket" });
-        CATEGORY_RULES.put("Transport",
-                new String[] { "uber", "lyft", "taxi", "bus", "train", "fuel", "gas", "shell", "parking" });
-        CATEGORY_RULES.put("Utilities",
-                new String[] { "electric", "water", "internet", "phone", "mobile", "utility", "bill" });
-        CATEGORY_RULES.put("Shopping", new String[] { "amazon", "walmart", "target", "clothing", "shoe", "store" });
-        CATEGORY_RULES.put("Entertainment", new String[] { "netflix", "spotify", "movie", "cinema", "game", "steam" });
+    public FinanceService() {
+        // Initialize default rules
+        addRule("Food", "restaurant", "cafe", "coffee", "burger", "pizza", "kfc", "mcdonalds", "grocery",
+                "supermarket");
+        addRule("Transport", "uber", "lyft", "taxi", "bus", "train", "fuel", "gas", "shell", "parking");
+        addRule("Utilities", "electric", "water", "internet", "phone", "mobile", "utility", "bill");
+        addRule("Shopping", "amazon", "walmart", "target", "clothing", "shoe", "store");
+        addRule("Entertainment", "netflix", "spotify", "movie", "cinema", "game", "steam");
+    }
+
+    public void addRule(String category, String... keywords) {
+        categoryRules.computeIfAbsent(category, k -> new ArrayList<>()).addAll(List.of(keywords));
+    }
+
+    public void updateCategoryRule(String keyword, String newCategory) {
+        // Remove keyword from old category if exists
+        categoryRules.values().forEach(list -> list.remove(keyword.toLowerCase()));
+
+        // Add to new category
+        addRule(newCategory, keyword.toLowerCase());
     }
 
     public List<Transaction> parseCsv(MultipartFile file) throws IOException {
@@ -78,19 +89,83 @@ public class FinanceService {
         return totals;
     }
 
+    // Feature: Subscription Hunter
+    public List<String> detectSubscriptions(List<Transaction> transactions) {
+        Map<String, List<LocalDate>> recurrenceMap = new HashMap<>();
+
+        // Group by description (simple exact match for now, could be fuzzy)
+        for (Transaction t : transactions) {
+            if (t.amount() < 0) { // Only expenses
+                recurrenceMap.computeIfAbsent(t.description(), k -> new ArrayList<>()).add(t.date());
+            }
+        }
+
+        List<String> validSubscriptions = new ArrayList<>();
+
+        for (Map.Entry<String, List<LocalDate>> entry : recurrenceMap.entrySet()) {
+            List<LocalDate> dates = entry.getValue();
+            if (dates.size() >= 2) {
+                // Check if roughly monthly (25-35 days apart)
+                dates.sort(LocalDate::compareTo);
+                boolean isMonthly = true;
+                for (int i = 0; i < dates.size() - 1; i++) {
+                    long days = java.time.temporal.ChronoUnit.DAYS.between(dates.get(i), dates.get(i + 1));
+                    if (days < 25 || days > 35) {
+                        isMonthly = false;
+                        break;
+                    }
+                }
+                if (isMonthly) {
+                    validSubscriptions.add(entry.getKey() + " (Seen " + dates.size() + " times)");
+                }
+            }
+        }
+        return validSubscriptions;
+    }
+
+    // Feature: Forecasting
+    // Returns estimated days remaining
+    public int forecastRunway(double currentBalance, List<Transaction> transactions) {
+        if (transactions.isEmpty())
+            return 0;
+
+        // simple average daily spend
+        double totalSpend = transactions.stream()
+                .filter(t -> t.amount() < 0)
+                .mapToDouble(Transaction::amount)
+                .sum(); // this is negative
+
+        double absTotalSpend = Math.abs(totalSpend);
+
+        LocalDate minDate = transactions.stream().map(Transaction::date).min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+        LocalDate maxDate = transactions.stream().map(Transaction::date).max(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+
+        long daysRange = java.time.temporal.ChronoUnit.DAYS.between(minDate, maxDate);
+        if (daysRange == 0)
+            daysRange = 1;
+
+        double dailyBurn = absTotalSpend / daysRange;
+
+        if (dailyBurn == 0)
+            return 9999;
+
+        return (int) (currentBalance / dailyBurn);
+    }
+
     private String getColumn(CSVRecord record, String... possibleNames) {
         for (String name : possibleNames) {
             if (record.isMapped(name)) {
                 return record.get(name);
             }
         }
-        // Fallback: try by index if headers are missing? For now return null.
         return null;
     }
 
     private String categorize(String description) {
         String lowerDesc = description.toLowerCase(Locale.ROOT);
-        for (Map.Entry<String, String[]> entry : CATEGORY_RULES.entrySet()) {
+        for (Map.Entry<String, List<String>> entry : categoryRules.entrySet()) {
             for (String keyword : entry.getValue()) {
                 if (lowerDesc.contains(keyword)) {
                     return entry.getKey();
@@ -101,15 +176,13 @@ public class FinanceService {
     }
 
     private LocalDate parseDate(String dateStr) {
-        // Simple parser, can be expanded for more formats
         try {
-            return LocalDate.parse(dateStr, DateTimeFormatter.ISO_DATE); // yyyy-MM-dd
+            return LocalDate.parse(dateStr, DateTimeFormatter.ISO_DATE);
         } catch (Exception e) {
             try {
-                // Try standard US format MM/dd/yyyy
                 return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("MM/dd/yyyy"));
             } catch (Exception ex) {
-                return LocalDate.now(); // Fallback
+                return LocalDate.now();
             }
         }
     }
