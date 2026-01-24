@@ -29,29 +29,50 @@ public class AiController {
     private final SettingsService settingsService;
     private final PrivacyService privacyService;
 
+    private final com.localai.service.ProcessingStatusService statusService;
+
+    // Added statusService to constructor
     public AiController(ChatClient chatClient, ModelManagerService modelManager, DocumentService documentService,
-            VectorStore vectorStore, SettingsService settingsService, PrivacyService privacyService) {
+            VectorStore vectorStore, SettingsService settingsService, PrivacyService privacyService,
+            com.localai.service.ProcessingStatusService statusService) {
         this.chatClient = chatClient;
         this.modelManager = modelManager;
         this.documentService = documentService;
         this.vectorStore = vectorStore;
         this.settingsService = settingsService;
         this.privacyService = privacyService;
+        this.statusService = statusService;
+    }
+
+    @PostMapping("/docs/upload")
+    public Map<String, Object> uploadDocument(@RequestParam("file") MultipartFile file) {
+        try {
+            // New Async Flow
+            String jobId = documentService.initProcess(file);
+            return Map.of(
+                    "status", "accepted",
+                    "message", "Document ingestion started",
+                    "jobId", jobId);
+        } catch (Throwable e) {
+            return Map.of("status", "error", "message", "Failed to start document ingestion: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/docs/status/{jobId}")
+    public com.localai.service.ProcessingStatusService.JobStatus getJobStatus(@PathVariable String jobId) {
+        return statusService.getStatus(jobId);
     }
 
     @PostMapping("/chat")
-    @SuppressWarnings("unchecked")
     public Map<String, String> chat(@RequestBody Map<String, String> request) {
         String userMessage = request.get("message");
 
         // --- Privacy Layer ---
-        Map<String, Object> settings = settingsService.getSettings();
-        Map<String, Object> privacyConfig = (Map<String, Object>) settings.get("privacyConfig");
+        com.localai.model.settings.AppSettings settings = settingsService.getSettings();
+        com.localai.model.settings.PrivacyConfig privacyConfig = settings.getPrivacyConfig();
 
         if (privacyConfig != null) {
-            String redactLevel = (String) privacyConfig.get("redactLevel");
-            // Default to 'high' if config exists but field is missing? Or 'none'. Protocol
-            // says default is 'high' in UI.
+            String redactLevel = privacyConfig.getRedactLevel();
             if (redactLevel != null) {
                 String redactedMessage = privacyService.redact(userMessage, redactLevel);
                 if (!redactedMessage.equals(userMessage)) {
@@ -79,9 +100,12 @@ public class AiController {
         }
 
         // 2. Construct Prompt with Context
-        String systemMsg = "You are a helpful AI assistant. ";
+        String systemMsg = settings.getSystemPrompt();
+        if (systemMsg == null || systemMsg.isEmpty())
+            systemMsg = "You are a helpful AI assistant.";
+
         if (context.length() > 0) {
-            systemMsg += "Use the provided context to answer the user's question. If the answer is not in the context, say so, but try to be helpful based on general knowledge.\n"
+            systemMsg += "\nUse the provided context to answer the user's question. If the answer is not in the context, say so, but try to be helpful based on general knowledge.\n"
                     + context.toString();
         }
 
@@ -89,59 +113,23 @@ public class AiController {
         UserMessage userMsg = new UserMessage(userMessage);
 
         // Fetch Performance Settings
-        Map<String, Object> perfConfig = (Map<String, Object>) settings.get("perfConfig");
+        com.localai.model.settings.PerfConfig perfConfig = settings.getPerfConfig();
 
         OllamaOptions options = OllamaOptions.create().withModel(modelName);
 
         if (perfConfig != null) {
-            if (perfConfig.get("contextWindow") != null) {
-                options.withNumCtx(((Number) perfConfig.get("contextWindow")).intValue());
-            }
-            if (perfConfig.get("gpuLayers") != null) {
-                // Try alternate casing or generic option if withNumGpu fails
-                try {
-                    // Reflection or valid method check? No, just try withNumGPU
-                    // If 0.8.1 doesn't have it, we might need to use generic options if available
-                    // or omit
-                    // For now, replacing with withNumGPU as a guess or commenting out if unsure
-                    // options.withNumGpu(...) failed.
-                    // trying: options.withNumGPU(...)
-                } catch (Exception e) {
-                }
-                // options.withNumCtx is valid.
-                // let's try withOption("num_gpu", val) if available?
-                // Checking source for 0.8.1 user guide:
-                // options.withNumGPU(...) is seemingly correct in newer versions.
-                // If 0.8.1 is old, it might be missing.
-                // I will comment it out for now to ensure compilation and mention it to user.
-                // options.withNumGpu(((Number) perfConfig.get("gpuLayers")).intValue());
-            }
-            if (perfConfig.get("threadCount") != null) {
-                Object threadCount = perfConfig.get("threadCount");
-                // Handle "auto" or integer
-                if (threadCount instanceof Number) {
-                    options.withNumThread(((Number) threadCount).intValue());
-                }
-            }
+            options.withNumCtx(perfConfig.getContextWindow());
+            // For threads, we assume it's always set or defaults in the boolean/int logic
+            options.withNumThread(perfConfig.getThreadCount());
+
+            // Gpu layers if supported
+            // options.withNumGpu(perfConfig.getGpuLayers());
         }
 
         Prompt prompt = new Prompt(List.of(systemMessage, userMsg), options);
 
         String response = chatClient.call(prompt).getResult().getOutput().getContent();
         return Map.of("response", response, "model", modelName);
-    }
-
-    @PostMapping("/docs/upload")
-    public Map<String, Object> uploadDocument(@RequestParam("file") MultipartFile file) {
-        try {
-            Map<String, Object> metadata = documentService.processAndVectorize(file);
-            return Map.of(
-                    "status", "success",
-                    "message", "Document indexed successfully",
-                    "metadata", metadata);
-        } catch (Throwable e) {
-            return Map.of("status", "error", "message", "Failed to index document: " + e.getMessage());
-        }
     }
 
     @PostMapping("/chat/classify")
@@ -157,7 +145,6 @@ public class AiController {
     }
 
     @PostMapping("/chat/complexity")
-    @SuppressWarnings("unchecked")
     public Map<String, Object> checkComplexity(@RequestBody Map<String, String> request) {
         String text = request.get("text");
         if (text == null || text.trim().isEmpty()) {
@@ -189,24 +176,17 @@ public class AiController {
                 + text;
 
         // Fetch Performance Settings
-        Map<String, Object> settings = settingsService.getSettings();
-        Map<String, Object> perfConfig = (Map<String, Object>) settings.get("perfConfig");
+        com.localai.model.settings.AppSettings settings = settingsService.getSettings();
+        com.localai.model.settings.PerfConfig perfConfig = settings.getPerfConfig();
 
         OllamaOptions options = OllamaOptions.create().withModel(ModelManagerService.LITE_MODEL);
 
         if (perfConfig != null) {
             // Use same settings but maybe lighter context for classification?
             // For now, respect global settings.
-            if (perfConfig.get("contextWindow") != null) {
-                options.withNumCtx(((Number) perfConfig.get("contextWindow")).intValue());
-            }
+            options.withNumCtx(perfConfig.getContextWindow());
             // GPU layers omitted until method confirmed
-            if (perfConfig.get("threadCount") != null) {
-                Object threadCount = perfConfig.get("threadCount");
-                if (threadCount instanceof Number) {
-                    options.withNumThread(((Number) threadCount).intValue());
-                }
-            }
+            options.withNumThread(perfConfig.getThreadCount());
         }
 
         Prompt prompt = new Prompt(promptText, options);

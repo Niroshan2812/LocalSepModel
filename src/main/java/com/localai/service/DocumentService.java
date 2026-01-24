@@ -27,82 +27,86 @@ public class DocumentService {
 
     private static final Logger logger = LoggerFactory.getLogger(DocumentService.class);
     private final SimpleVectorStore vectorStore;
+    private final ProcessingStatusService statusService;
 
-    public DocumentService(SimpleVectorStore vectorStore) {
+    public DocumentService(SimpleVectorStore vectorStore, ProcessingStatusService statusService) {
         this.vectorStore = vectorStore;
+        this.statusService = statusService;
     }
 
-    public Map<String, Object> processAndVectorize(MultipartFile file) throws IOException {
-        logger.info("Processing PDF: {}", file.getOriginalFilename());
+    public String initProcess(MultipartFile file) throws IOException {
+        String jobId = statusService.createJob();
 
-        // 1. Save MultipartFile to a temporary file because PDFReader prefers Resources
-        Path tempFile = Files.createTempFile("upload-", ".pdf");
+        // Save to temp file strictly for the async process to pick up
+        Path tempFile = Files.createTempFile("upload-", file.getOriginalFilename());
         file.transferTo(tempFile.toFile());
 
-        Map<String, Object> metadata = new HashMap<>();
+        // Trigger Async
+        processInBackground(jobId, tempFile.toFile(), file.getOriginalFilename());
+
+        return jobId;
+    }
+
+    @org.springframework.scheduling.annotation.Async
+    public void processInBackground(String jobId, File tempFile, String originalFilename) {
+        statusService.updateStatus(jobId, "PROCESSING", "Starting ingestion for " + originalFilename);
 
         try {
-            Resource pdfResource = new FileSystemResource(tempFile.toFile());
+            logger.info("Processing PDF Async: {}", originalFilename);
+            Map<String, Object> metadata = new HashMap<>();
 
-            // 1.5 Lite Task: Extract Metadata using PDFBox
-            // Temporarily disabled for debugging compilation mismatch
-            /*
-             * try (PDDocument document = PDDocument.load(tempFile.toFile())) {
-             * PDDocumentInformation info = document.getDocumentInformation();
-             * metadata.put("page_count", document.getNumberOfPages());
-             * metadata.put("title", info.getTitle() != null ? info.getTitle() :
-             * "Unknown Title");
-             * metadata.put("author", info.getAuthor() != null ? info.getAuthor() :
-             * "Unknown Author");
-             * metadata.put("filename", file.getOriginalFilename());
-             * logger.info("Extracted Metadata: {}", metadata);
-             * }
-             */
-            // Fallback metadata
-            metadata.put("filename", file.getOriginalFilename());
-            metadata.put("page_count", "Unknown");
-            metadata.put("author", "Unknown");
+            Resource pdfResource = new FileSystemResource(tempFile);
 
-            // 2. Read PDF for RAG (Pro Task)
+            // 1. Read PDF
+            statusService.updateStatus(jobId, "PROCESSING", "reading_pdf");
             PagePdfDocumentReader pdfReader = new PagePdfDocumentReader(pdfResource);
             List<Document> documents = pdfReader.get();
             logger.info("Extracted {} pages/documents from PDF.", documents.size());
 
-            // Collect full text for Frontend ("Stateless" Legal Utils)
+            // Collect full text - Optional/Lite logic
             StringBuilder fullText = new StringBuilder();
             for (Document doc : documents) {
                 fullText.append(doc.getContent()).append("\n\n");
             }
             metadata.put("extracted_text", fullText.toString());
+            metadata.put("filename", originalFilename);
+            metadata.put("page_count", documents.size());
 
-            // 3. Split into tokens (Chunks)
+            // 3. Split into tokens
+            statusService.updateStatus(jobId, "PROCESSING", "splitting_text");
             TokenTextSplitter splitter = new TokenTextSplitter();
             List<Document> chunks = splitter.apply(documents);
             logger.info("Split into {} chunks.", chunks.size());
 
             // 4. Add to Vector Store
+            statusService.updateStatus(jobId, "PROCESSING", "embedding_chunks");
             vectorStore.add(chunks);
             logger.info("Added chunks to Vector Store.");
 
-            // 5. Persist Vector Store to disk
+            // 5. Persist
             File storeFile = new File("vectorstore.json");
             vectorStore.save(storeFile);
-            logger.info("Vector store saved to: {}", storeFile.getAbsolutePath());
+            logger.info("Vector store saved.");
 
-            return metadata;
+            statusService.updateStatus(jobId, "COMPLETED", "Document ingested successfully", metadata);
 
         } catch (Exception e) {
-            logger.error("Failed to process PDF", e);
-            throw new IOException("Error processing PDF", e);
+            logger.error("Async Processing Failed", e);
+            statusService.updateStatus(jobId, "ERROR", e.getMessage());
         } finally {
-            // Cleanup temp file
-            Files.deleteIfExists(tempFile);
+            // Cleanup
+            try {
+                Files.deleteIfExists(tempFile.toPath());
+            } catch (IOException ignored) {
+            }
         }
     }
 
     public void clearStore() {
         try {
             File storeFile = new File("vectorstore.json");
+
+            // 1. Delete existing file
             if (storeFile.exists()) {
                 if (storeFile.delete()) {
                     logger.info("Vector Store persistence file deleted (Nuked).");
@@ -110,8 +114,31 @@ public class DocumentService {
                     logger.error("Failed to delete Vector Store file.");
                 }
             }
-            // Ideally we also clear in-memory map. SimpleVectorStore might not expose this.
-            // But deleting the file ensures next load is clean.
+
+            // 2. Clear In-Memory Store
+            // SimpleVectorStore loads from file. If we load an empty file, it might clear
+            // it?
+            // Or we just rely on restarting. Ideally we want runtime clearing.
+            // Since SimpleVectorStore.load() typically replaces or adds, we need to be
+            // careful.
+            // If it adds, we are stuck. But assuming standard serialization
+            // deserialization...
+
+            // Workaround: We cannot easily access the internal map to clear it without
+            // reflection
+            // or an API update.
+            // BEST EFFORT: Create a valid empty JSON file and load it.
+            // Spring AI SimpleVectorStore expects a JSON map or list.
+            // Let's try writing an empty map JSON.
+
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.writeValue(storeFile, new java.util.HashMap<>()); // write {}
+
+            // 3. Reload from the empty file
+            vectorStore.load(storeFile);
+
+            logger.info("Vector Store in-memory state reset (attempted).");
+
         } catch (Exception e) {
             logger.error("Error clearing vector store", e);
         }

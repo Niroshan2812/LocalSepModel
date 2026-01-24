@@ -1,8 +1,8 @@
 {
   "systemPrompt" : "Call me 'Sir', be concise, never use emojis.",
   "privacyConfig" : {
-    "retentionHealth" : "never",
-    "retentionFinance" : "24h",
+    "retentionHealth" : "30d",
+    "retentionFinance" : "7d",
     "redactLevel" : "high",
     "localOnlyMode" : true,
     "anonymizeLogs" : false

@@ -52,12 +52,12 @@ public class SettingsController {
     }
 
     @GetMapping
-    public Map<String, Object> getSettings() {
+    public com.localai.model.settings.AppSettings getSettings() {
         return settingsService.getSettings();
     }
 
     @PostMapping
-    public Map<String, Object> saveSettings(@RequestBody Map<String, Object> newSettings) {
+    public Map<String, Object> saveSettings(@RequestBody com.localai.model.settings.AppSettings newSettings) {
         settingsService.saveSettings(newSettings);
         return Map.of("status", "success", "message", "Settings saved successfully");
     }

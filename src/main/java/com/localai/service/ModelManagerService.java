@@ -240,7 +240,8 @@ public class ModelManagerService {
         // AppData/Roaming/... or similar logic.
         // For simplicity, using a specific folder relative to run for now or user home.
         String userHome = System.getProperty("user.home");
-        Path hiddenDir = Paths.get(userHome, "AppData", "Roaming", "LocalAI", "models");
+        // Use a hidden folder in user home for cross-platform compatibility
+        Path hiddenDir = Paths.get(userHome, ".localai", "models");
         return hiddenDir.resolve(PRO_MODEL_FILENAME).toString();
     }
 }
